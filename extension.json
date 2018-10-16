@@ -1,6 +1,6 @@
 {
-    name: 'Dobot',
-    type: 'arduino',
-    extensions: ['Dobot'],
-    image: 'dobot.png'
+    "name": "Dobot",
+    "type": "arduino",
+    "extensions": ["Dobot"],
+    "image": "dobot.png"
 }
