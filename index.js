@@ -11,43 +11,17 @@ const BlockType = Scratch.BlockType;
 const formatMessage = Scratch.formatMessage;
 const log = Scratch.log;
 
-let echoType = 0;
-let queuedCmdIndex = 0;
-
-const buildCmd = (id, rw, isQueued, param) => {
-    id = id & 0xff;
-    let ctrl = 0;
-    if (rw){
-        ctrl += 0x1;
-    }
-    if (isQueued){
-        ctrl += 0x2;
-    }
-    let cmdlen = 2;
-    let header = [0xaa, 0xaa];
-    let buf = [id, ctrl]; // default buffer header
-    if (param && (param instanceof Array)){
-        cmdlen += param.length;
-        buf = buf.concat(param);
-    }
-    let sum = buf.reduce((a, b) => a + b, 0);
-    let checkSum = 256 - sum & 0xFF;
-    buf.push(checkSum);
-    buf = header.concat(cmdlen).concat(buf);
-    return buf;
-};
-
-const moveAngleTypeMap = {JUMP: 3, JOINT: 4, LINEAR: 5};
-const increTypeMap = {LINEAR: 7, JOINT: 8};
-const positionMap = {'x': 0, 'y': 1, 'z': 2, 'r': 3, 'joint 1': 4, 'joint 2': 5, 'joint 3': 6, 'joint 4': 7};
-const eioTypeMap = {'Dummy': 0, 'OUTPUT': 1, 'PWM': 2, 'INPUT': 3, 'ADC': 4};	//const eioTypeMap = {'Dummy': 0, 'OUTPUT 3.3V': 1, 'OUTPUT 5V': 1, 'OUTPUT 12V': 1, 'OUTPUT PWM': 2, 'INPUT 3.3V': 3, 'INPUT AD': 4};
-const eioioportMap= {'EIO 1': 1, 'EIO 2': 2, 'EIO 3': 3, 'EIO 4': 4, 'EIO 5': 5, 'EIO 6': 6, 'EIO 7': 7, 'EIO 8': 8, 'EIO 9': 9, 'EIO 10': 10, 'EIO 11': 11, 'EIO 12': 12, 'EIO 13': 13, 'EIO 14': 14, 'EIO 15': 15, 'EIO 16/SW 1': 16, 'EIO 17/SW 2': 17, 'EIO 18': 18, 'EIO 19': 19, 'EIO 20': 20};
-const eiodolevelMap= {'0': 0, '1': 1};
-const onoffMap = {'ON': 1, 'OFF': 0};
-const motorportMap = {'STEEPER1': 0, 'STEEPER2': 1};
-const ioportMap = {'GP1': 0, 'GP2': 1, 'GP4': 2, 'GP5': 3};
-const irportMap = {'GP1': 0, 'GP2': 1};
-const irreadportMap = {'GP1': 11, 'GP2': 14};
+// const moveAngleTypeMap = {JUMP: 3, JOINT: 4, LINEAR: 5};
+// const increTypeMap = {LINEAR: 7, JOINT: 8};
+// const positionMap = {'x': 0, 'y': 1, 'z': 2, 'r': 3, 'joint 1': 4, 'joint 2': 5, 'joint 3': 6, 'joint 4': 7};
+// const eioTypeMap = {'Dummy': 0, 'OUTPUT': 1, 'PWM': 2, 'INPUT': 3, 'ADC': 4};	//const eioTypeMap = {'Dummy': 0, 'OUTPUT 3.3V': 1, 'OUTPUT 5V': 1, 'OUTPUT 12V': 1, 'OUTPUT PWM': 2, 'INPUT 3.3V': 3, 'INPUT AD': 4};
+// const eioioportMap= {'EIO 1': 1, 'EIO 2': 2, 'EIO 3': 3, 'EIO 4': 4, 'EIO 5': 5, 'EIO 6': 6, 'EIO 7': 7, 'EIO 8': 8, 'EIO 9': 9, 'EIO 10': 10, 'EIO 11': 11, 'EIO 12': 12, 'EIO 13': 13, 'EIO 14': 14, 'EIO 15': 15, 'EIO 16/SW 1': 16, 'EIO 17/SW 2': 17, 'EIO 18': 18, 'EIO 19': 19, 'EIO 20': 20};
+// const eiodolevelMap= {'0': 0, '1': 1};
+// const onoffMap = {'ON': 1, 'OFF': 0};
+// const motorportMap = {'STEEPER1': 0, 'STEEPER2': 1};
+// const ioportMap = {'GP1': 0, 'GP2': 1, 'GP4': 2, 'GP5': 3};
+// const irportMap = {'GP1': 0, 'GP2': 1};
+// const irreadportMap = {'GP1': 11, 'GP2': 14};
 
 class DobotExtension{
     constructor (runtime){
@@ -96,14 +70,14 @@ class DobotExtension{
 
     connect (id){
         this.comm.connect(id).then(sess => {
-            window.kblock.tx = 'hex';
-            window.kblock.rx = 'hex';
-
             this.session = sess;
             this.session.onmessage = this.onmessage;
             this.session.onclose = this.onclose;
             // notify gui connected
             this.runtime.emit(this.runtime.constructor.PERIPHERAL_CONNECTED);
+
+            window.kblock.tx = 'hex';
+            window.kblock.rx = 'hex';
         }).catch(err => {
             log.warn('connect peripheral fail', err);
         });
@@ -201,16 +175,19 @@ class DobotExtension{
                     },
                     func: 'delaySec'
                 },
-    /*            {//moveToXYZR
+                {//moveToXYZR
                     opcode: 'moveToXYZR',
                     blockType: BlockType.COMMAND,
 
-                    text: 'Move Type[TYPE] X[X] Y[Y] Z[Z] R[R]',
+                    text: formatMessage({
+                        id: 'Dobot.moveToXYZR',
+                        default: 'Move Type[TYPE] X[X] Y[Y] Z[Z] R[R]'
+                    }),
                     arguments: {
                         TYPE: {
                             type: ArgumentType.STRING,
-                            defaultValue: 'LINEAR',
-                            menu: 'moveType'
+                            defaultValue: 2,
+                            menu: 'moveXYZRType'
                         },
                         X: {
                             type: ArgumentType.NUMBER,
@@ -230,7 +207,7 @@ class DobotExtension{
                         }
                     },
                     func: 'moveToXYZR'
-                },*/
+                },
                 {//moveToXYZR_LinearRail
                     opcode: 'moveToXYZR_LinearRail',
                     blockType: BlockType.COMMAND,
@@ -243,7 +220,7 @@ class DobotExtension{
                         TYPE: {
                             type: ArgumentType.STRING,
                             defaultValue: 2,
-                            menu: 'moveType'
+                            menu: 'moveXYZRType'
                         },
                         X: {
                             type: ArgumentType.NUMBER,
@@ -279,8 +256,8 @@ class DobotExtension{
                     arguments: {
                         TYPE: {
                             type: ArgumentType.STRING,
-                            defaultValue: 2,
-                            menu: 'moveType'
+                            defaultValue: 5,
+                            menu: 'moveAngleType'
                         },
                         J1: {
                             type: ArgumentType.NUMBER,
@@ -313,7 +290,7 @@ class DobotExtension{
                         TYPE: {
                             type: ArgumentType.STRING,
                             defaultValue: 7,
-                            menu: 'increType'
+                            menu: 'increXYZRType'
                         },
                         X: {
                             type: ArgumentType.NUMBER,
@@ -851,6 +828,30 @@ class DobotExtension{
                     },
                     func: 'setLostStep'
                 },
+                {//setEndEffectorParams
+                    opcode: 'setEndEffectorParams',
+                    blockType: BlockType.COMMAND,
+
+                    text: formatMessage({
+                        id: 'Dobot.setEndEffectorParams',
+                        default: 'Set EndEffector Params X Bias[XBIAS] Y Bias[YBIAS] Z Bias[ZBIAS]'
+                    }),
+                    arguments: {
+                        XBIAS: {
+                            type: ArgumentType.NUMBER,
+                            defaultValue: 0
+                        },
+                        YBIAS: {
+                            type: ArgumentType.NUMBER,
+                            defaultValue: 0
+                        },
+                        ZBIAS: {
+                            type: ArgumentType.NUMBER,
+                            defaultValue: 0
+                        }
+                    },
+                    func: 'setEndEffectorParams'
+                },
                 //Read
                 {//getPositon
                     opcode: 'getPositon',
@@ -965,19 +966,20 @@ class DobotExtension{
                     arguments: {},
                     func: 'SetQueuedCmdForceStopExe242'
                 },//*/
-                /*{//GetQueuedCmdCurrentIndex246
-                    opcode: 'GetQueuedCmdCurrentIndex246',
+                /*{//GetQueuedCmdCurrentIndex
+                    opcode: 'GetQueuedCmdCurrentIndex',
                     blockType: BlockType.REPORTER,
 
-                    text: 'GetQueuedCmdCurrentIndex246',
+                    text: 'GetQueuedCmdCurrentIndex',
                     arguments: {},
-                    func: 'GetQueuedCmdCurrentIndex246'
+                    func: 'GetQueuedCmdCurrentIndex'
                 },//*/
             ],
 
             menus: {
-                moveType: [{text: 'JUMP', value: '0'}, {text: 'JOINT', value: '1'}, {text: 'LINEAR', value: '2'}],
-                increType: [{text: 'LINEAR', value: '7'}, {text: 'JOINT', value: '8'}],
+                moveXYZRType: [{text: 'JUMP', value: '0'}, {text: 'JOINT', value: '1'}, {text: 'LINEAR', value: '2'}, {text: 'JUMP LINEAR', value: '9'}],
+                moveAngleType: [{text: 'JUMP', value: '3'}, {text: 'JOINT', value: '4'}, {text: 'LINEAR', value: '5'}],
+                increXYZRType: [{text: 'LINEAR', value: '7'}, {text: 'JOINT', value: '8'}],
                 position: [
                     {text: 'x', value: '0'},
                     {text: 'y', value: '1'},
@@ -1034,95 +1036,136 @@ class DobotExtension{
         };
     }
 
-    initialPosition (args) {
-        const cmd = buildCmd(31, 1, 1, null);
-        this.write(cmd);
+    /****************************************************************************************************/
+    /****************************************************************************************************/
+    /****************************************************************************************************/
+
+    async initialPosition (args) {
+    	console.log('initialPosition');
+        const cmd = this.buildCmd(31, 1, 1, null);
+        await this.writeQueueCmd(cmd);
     }
 
     clearAllAlarm (args) {
-        const cmd = buildCmd(20, 1, 0, null);
+        const cmd = this.buildCmd(20, 1, 0, null);
         this.write(cmd);
     }
 
     SetQueuedCmdStartExec240 (args) {
-        const cmd = buildCmd(240, 1, 0, null);
+        const cmd = this.buildCmd(240, 1, 0, null);
         this.write(cmd);
     }
 
     SetQueuedCmdStopExec241 (args) {
-        const cmd = buildCmd(241, 1, 0, null);
+        const cmd = this.buildCmd(241, 1, 0, null);
         this.write(cmd);
     }
 
     SetQueuedCmdForceStopExe242 (args) {
-        const cmd = buildCmd(242, 1, 0, null);
+        const cmd = this.buildCmd(242, 1, 0, null);
         this.write(cmd);
     }
 
     AllCmdClear (args) {
-        const cmd = buildCmd(245, 1, 0, null);
+        const cmd = this.buildCmd(245, 1, 0, null);
         this.write(cmd);
     }
 
-    GetQueuedCmdCurrentIndex246 (args) {
-        const cmd = buildCmd(246, 0, 0, null);
-        return this.report(cmd).then(ret => this.parseCmd(ret));
-        //this.write(cmd);;
-    }
+    // GetQueuedCmdCurrentIndex (args) {
+    //     const cmd = this.buildCmd(246, 0, 0, null);
+    //     return this.report(cmd).then(ret => this.getParams(ret));
+    //     //this.write(cmd);;
+    // }
 
-    delaySec (args) {
+    async delaySec (args) {
         let time = new Uint32Array(1);
         time[0] = args.TIME * 1000;
-        const ary = new Uint8Array(time.buffer);
-        let param = Array.from(ary);
-        const cmd = buildCmd(110, 1, 1, param);
-        this.write(cmd);
+        let param = Array.from(new Uint8Array(time.buffer));
+        const cmd = this.buildCmd(110, 1, 1, param);
+        await this.writeQueueCmd(cmd);
     }
 
     getPositon (args) {
-        echoType = parseInt(args.POS, 10);
-        const cmd = buildCmd(10, 0, 0, null);
-        return this.report(cmd).then(ret => this.parseCmd(ret));
+        const echoType = parseInt(args.POS, 10);
+        const cmd = this.buildCmd(10, 0, 0, null);
+        
+        return this.report(cmd).then(ret => {
+            if (ret[0] == 0xaa && ret[1] == 0xaa) 
+            {
+                let params = new Uint8Array(ret.slice(5, -1));
+                let floatAry = new Float32Array(params.buffer);
+                return floatAry[echoType].toFixed(2) / 1;
+            }
+            else
+            {
+                return -1;
+            }
+        });
     }
 
-    moveToAngle (args) {
-        let angle = new Float32Array(4);
-        angle[0] = args.J1;
-        angle[1] = args.J2;
-        angle[2] = args.J3;
-        angle[3] = args.J4;
-        const ary = new Uint8Array(angle.buffer);
-        let param = [parseInt(args.TYPE, 10)].concat(Array.from(ary));
-        const cmd = buildCmd(84, 1, 1, param);
-
+    setLinearRail (args) {
+        const cmd = this.buildCmd(3, 1, 0, [parseInt(args.ONOFF, 10)]);
         this.write(cmd);
     }
 
-    increXYZR (args) {
+    async moveToXYZR (args) {
         let cord = new Float32Array(4);
         cord[0] = args.X;
         cord[1] = args.Y;
         cord[2] = args.Z;
         cord[3] = args.R;
-        const ary = new Uint8Array(cord.buffer);
-        let param = [parseInt(args.TYPE, 10)].concat(Array.from(ary));
-        const cmd = buildCmd(84, 1, 1, param);
-        this.write(cmd);
+        let param = [parseInt(args.TYPE, 10)].concat(Array.from(new Uint8Array(cord.buffer)));
+        const cmd = this.buildCmd(84, 1, 1, param);
+        await this.writeQueueCmd(cmd);
     }
 
-    increAngle (args) {
+    async moveToXYZR_LinearRail (args) {
+        let cord = new Float32Array(5);
+        cord[0] = args.X;
+        cord[1] = args.Y;
+        cord[2] = args.Z;
+        cord[3] = args.R;
+        cord[4] = args.POS;
+        let param = [parseInt(args.TYPE, 10)].concat(Array.from(new Uint8Array(cord.buffer)));
+        const cmd = this.buildCmd(86, 1, 1, param);
+        await this.writeQueueCmd(cmd);
+    }
+
+    async moveToAngle (args) {
         let angle = new Float32Array(4);
         angle[0] = args.J1;
         angle[1] = args.J2;
         angle[2] = args.J3;
         angle[3] = args.J4;
-        const ary = new Uint8Array(angle.buffer);
-        let param = [6].concat(Array.from(ary));
-        const cmd = buildCmd(84, 1, 1, param);
-        this.write(cmd);
+        let param = [parseInt(args.TYPE, 10)].concat(Array.from(new Uint8Array(angle.buffer)));
+        const cmd = this.buildCmd(84, 1, 1, param);
+
+        await this.writeQueueCmd(cmd);
     }
 
-    moveArc (args) {
+    async increXYZR (args) {
+        let cord = new Float32Array(4);
+        cord[0] = args.X;
+        cord[1] = args.Y;
+        cord[2] = args.Z;
+        cord[3] = args.R;
+        let param = [parseInt(args.TYPE, 10)].concat(Array.from(new Uint8Array(cord.buffer)));
+        const cmd = this.buildCmd(84, 1, 1, param);
+        await this.writeQueueCmd(cmd);
+    }
+
+    async increAngle (args) {
+        let angle = new Float32Array(4);
+        angle[0] = args.J1;
+        angle[1] = args.J2;
+        angle[2] = args.J3;
+        angle[3] = args.J4;
+        let param = [6].concat(Array.from(new Uint8Array(angle.buffer)));
+        const cmd = this.buildCmd(84, 1, 1, param);
+        await this.writeQueueCmd(cmd);
+    }
+
+    async moveArc (args) {
         let tmp = new Float32Array(8);
         tmp[0] = args.X1;
         tmp[1] = args.Y1;
@@ -1132,171 +1175,184 @@ class DobotExtension{
         tmp[5] = args.Y2;
         tmp[6] = args.Z2;
         tmp[7] = args.R2;
-        const ary = new Uint8Array(tmp.buffer);
-        let param = Array.from(ary);
-        const cmd = buildCmd(101, 1, 1, param);
-
-        this.write(cmd);
+        let param = Array.from(new Uint8Array(tmp.buffer));
+        const cmd = this.buildCmd(101, 1, 1, param);
+        await this.writeQueueCmd(cmd);
     }
 
-    setLinearRail (args) {
-        const cmd = buildCmd(3, 1, 0, [parseInt(args.ONOFF, 10)]);
-        this.write(cmd);
-    }
-
-    moveToXYZR_LinearRail (args) {
-        let cord = new Float32Array(5);
-        cord[0] = args.X;
-        cord[1] = args.Y;
-        cord[2] = args.Z;
-        cord[3] = args.R;
-        cord[4] = args.POS;
-        const ary = new Uint8Array(cord.buffer);
-        let param = [parseInt(args.TYPE, 10)].concat(Array.from(ary));
-        const cmd = buildCmd(86, 1, 1, param);
-
-        this.write(cmd);
-    }
-
-    doPump (args) {
+    async doPump (args) {
+        let param = [0, 0];
         if (args.TAKEPUT === 'TAKE') {
             param = [1, 1];
         }
         else if (args.TAKEPUT === 'PUT') {
             param = [1, 0];
         }
-        else {
-            param = [0, 1];
-        }
-        const cmd = buildCmd(63, 1, 1, param);
-        this.write(cmd);
+        
+        const cmd = this.buildCmd(63, 1, 1, param);
+        await this.writeQueueCmd(cmd);
     }
 
-    doLaser (args) {
+    async doLaser (args) {
         let onoff = args.ONOFF === 'ON' ? 1 : 0;
         let param = [onoff, onoff];
-        const cmd = buildCmd(61, 1, 1, param);
-        this.write(cmd);
+        const cmd = this.buildCmd(61, 1, 1, param);
+        await this.writeQueueCmd(cmd);
     }
 
-    SetExtIO (args) {
+    async SetExtIO (args) {
         let param = [parseInt(args.EIO, 10), parseInt(args.TYPE, 10)];
-        const cmd = buildCmd(130, 1, 1, param);
-        this.write(cmd);
+        const cmd = this.buildCmd(130, 1, 1, param);
+        await this.writeQueueCmd(cmd);
     }
 
-    SetExtIO_IO3V3 (args) {
+    async SetExtIO_IO3V3 (args) {
         let param = [parseInt(args.EIO, 10), parseInt(args.TYPE, 10)];
-        const cmd = buildCmd(130, 1, 1, param);
-        this.write(cmd);
+        const cmd = this.buildCmd(130, 1, 1, param);
+        await this.writeQueueCmd(cmd);
     }
 
-    SetExtIO_InputADC (args) {
+    async SetExtIO_InputADC (args) {
         let param = [parseInt(args.EIO, 10), 4];
-        const cmd = buildCmd(130, 1, 1, param);
-        this.write(cmd);
+        const cmd = this.buildCmd(130, 1, 1, param);
+        await this.writeQueueCmd(cmd);
     }
 
-    SetExtIO_Output5V (args) {
+    async SetExtIO_Output5V (args) {
         let param = [parseInt(args.EIO, 10), 1];
-        const cmd = buildCmd(130, 1, 1, param);
-        this.write(cmd);
+        const cmd = this.buildCmd(130, 1, 1, param);
+        await this.writeQueueCmd(cmd);
     }
 
-    SetExtIO_Output12V (args) {
+    async SetExtIO_Output12V (args) {
         let param = [parseInt(args.EIO, 10), 1];
-        const cmd = buildCmd(130, 1, 1, param);
-        this.write(cmd);
+        const cmd = this.buildCmd(130, 1, 1, param);
+        await this.writeQueueCmd(cmd);
     }
 
-    SetExtIO_OutputPWM (args) {
+    async SetExtIO_OutputPWM (args) {
         let param = [parseInt(args.EIO, 10), 2];
-        const cmd = buildCmd(130, 1, 1, param);
-        this.write(cmd);
+        const cmd = this.buildCmd(130, 1, 1, param);
+        await this.writeQueueCmd(cmd);
     }
 
-    SetExtIODO (args) {
+    async SetExtIODO (args) {
         let param = [parseInt(args.EIO, 10), parseInt(args.VALUE, 10)];
-        const cmd = buildCmd(131, 1, 1, param);
-        this.write(cmd);
+        const cmd = this.buildCmd(131, 1, 1, param);
+        await this.writeQueueCmd(cmd);
     }
 
-    SetExtIOPWM (args) {
+    async SetExtIOPWM (args) {
         let tmp = new Float32Array(2);
         tmp[0] = args.HZ;
         tmp[1] = args.PWM;
-        const ary = new Uint8Array(tmp.buffer);
-        let param = [parseInt(args.EIO, 10)].concat(Array.from(ary));
-        const cmd = buildCmd(132, 1, 1, param);
-        this.write(cmd);
+        let param = [parseInt(args.EIO, 10)].concat(Array.from(new Uint8Array(tmp.buffer)));
+        const cmd = this.buildCmd(132, 1, 1, param);
+        await this.writeQueueCmd(cmd);
     }
 
     ReadExtIODI (args) {
-        const cmd = buildCmd(133, 0, 0, [parseInt(args.EIO, 10), 0]);
-        return this.report(cmd).then(ret => this.parseCmd(ret));
+        const cmd = this.buildCmd(133, 0, 0, [parseInt(args.EIO, 10), 0]);
+
+        return this.report(cmd).then(ret => {
+            if (ret[0] == 0xaa && ret[1] == 0xaa) 
+            {
+                let params = new Uint8Array(msg.slice(5, -1));
+                return params[1];
+            }
+            else
+            {
+                return -1;
+            }
+        });
     }
 
     ReadExtIOADC (args) {
-        const cmd = buildCmd(134, 0, 0, [parseInt(args.EIO, 10), 0, 0]);
-        return this.report(cmd).then(ret => this.parseCmd(ret));
+        const cmd = this.buildCmd(134, 0, 0, [parseInt(args.EIO, 10), 0, 0]);
+
+        return this.report(cmd).then(ret => {
+            if (ret[0] == 0xaa && ret[1] == 0xaa) 
+            {
+                let params = new Uint8Array(msg.slice(5, -1));
+                let uint16Ary = new Uint16Array(params.buffer.slice(1));
+                return uint16Ary[0];
+            }
+            else
+            {
+                return -1;
+            }
+        });
     }
 
-    SetMotor (args) {
+    async SetMotor (args) {
         let tmp = new Int32Array(1);
         tmp[0] = args.SPEED;
-        const ary = new Uint8Array(tmp.buffer);
-        let param = [parseInt(args.MOTOR, 10), 1].concat(Array.from(ary));
-        const cmd = buildCmd(135, 1, 1, param);
-        this.write(cmd);
+        let param = [parseInt(args.MOTOR, 10), 1].concat(Array.from(new Uint8Array(tmp.buffer)));
+        const cmd = this.buildCmd(135, 1, 1, param);
+        await this.writeQueueCmd(cmd);
     }
 
-    extMotorDistance (args) {
+    async extMotorDistance (args) {
         let Speed_tmp = new Int32Array(1);
         Speed_tmp[0] = args.SPEED;
         let Distance_tmp = new Uint32Array(1);
         Distance_tmp[0] = args.DISTANCE;
-        const Speed_ary = new Uint8Array(Speed_tmp.buffer);
-        const Distance_ary = new Uint8Array(Distance_tmp.buffer);
-        let param = [parseInt(args.MOTOR, 10), 1].concat(Array.from(Speed_ary)).concat(Array.from(Distance_ary));
-        const cmd = buildCmd(136, 1, 1, param);
-        this.write(cmd);
+        let param = [parseInt(args.MOTOR, 10), 1].concat(Array.from(new Uint8Array(Speed_tmp.buffer))).concat(Array.from(new Uint8Array(Distance_tmp.buffer)));
+        const cmd = this.buildCmd(136, 1, 1, param);
+        await this.writeQueueCmd(cmd);
     }
 
-    colorsensorSet (args) {
+    async colorsensorSet (args) {
         let param = [parseInt(args.ONOFF, 10), parseInt(args.IOPORT, 10)];
-        const cmd = buildCmd(137, 1, 1, param);
-        this.write(cmd);
+        const cmd = this.buildCmd(137, 1, 1, param);
+        await this.writeQueueCmd(cmd);
     }
 
     colorsensorRead (args) {
-        const cmd = buildCmd(137, 0, 0, null);
-        return this.report(cmd).then(ret => this.parseCmd(ret));
+        const cmd = this.buildCmd(137, 0, 0, null);
+
+        return this.report(cmd).then(ret => {
+            if (ret[0] == 0xaa && ret[1] == 0xaa) 
+            {
+                let params = new Uint8Array(msg.slice(5, -1));
+                return params[0].toString(16) + params[1].toString(16) + params[2].toString(16);
+            }
+            else
+            {
+                return -1;
+            }
+        });
     }
 
-    IRSwitchSet (args) {
+    async IRSwitchSet (args) {
         let param = [parseInt(args.ONOFF, 10), parseInt(args.IRPORT, 10)];
-        const cmd = buildCmd(138, 1, 1, param);
-        this.write(cmd);
+        const cmd = this.buildCmd(138, 1, 1, param);
+        await this.writeQueueCmd(cmd);
     }
 
     IRSwitchRead (args) {
-        const cmd = buildCmd(133, 0, 0, [parseInt(args.GP, 10), 0]);
-        return this.report(cmd).then(ret => this.parseCmd(ret));
+        const cmd = this.buildCmd(138, 0, 0, [parseInt(args.GP, 10), 0]);
+
+        return this.report(cmd).then(ret => {
+            if (ret[0] == 0xaa && ret[1] == 0xaa) 
+            {
+                let params = new Uint8Array(msg.slice(5, -1));
+                return params[0];
+            }
+            else
+            {
+                return -1;
+            }
+        });
     }
 
-    /*IRSwitchRead(args) {
-        const cmd = buildCmd(138, 0, 0, null);
-        return this.report(cmd).then(ret => this.parseCmd(ret));
-    };//*/
-
-    setMotionSpeedRatio (args) {
+    async setMotionSpeedRatio (args) {
         let tmp = new Float32Array(2);
         tmp[0] = args.VRATIO;
         tmp[1] = args.ARATIO;
-        const ary = new Uint8Array(tmp.buffer);
-        let param = Array.from(ary);
-        const cmd = buildCmd(83, 1, 1, param);
-        this.write(cmd);
+        let param = Array.from(new Uint8Array(tmp.buffer));
+        const cmd = this.buildCmd(83, 1, 1, param);
+        await this.writeQueueCmd(cmd);
     }
 
     setJointSpeed (args) {
@@ -1309,9 +1365,8 @@ class DobotExtension{
         tmp[5] = args.ACCELERATION;
         tmp[6] = args.ACCELERATION;
         tmp[7] = args.ACCELERATION;
-        const ary = new Uint8Array(tmp.buffer);
-        let param = Array.from(ary);
-        const cmd = buildCmd(80, 1, 0, param);
+        let param = Array.from(new Uint8Array(tmp.buffer));
+        const cmd = this.buildCmd(80, 1, 0, param);
         this.write(cmd);
     }
 
@@ -1325,9 +1380,8 @@ class DobotExtension{
         tmp[5] = args.ACCELERATION;
         tmp[6] = args.ACCELERATION;
         tmp[7] = args.ACCELERATION;
-        const ary = new Uint8Array(tmp.buffer);
-        let param = Array.from(ary);
-        const cmd = buildCmd(81, 1, 0, param);
+        let param = Array.from(new Uint8Array(tmp.buffer));
+        const cmd = this.buildCmd(81, 1, 0, param);
         this.write(cmd);
     }
 
@@ -1337,9 +1391,8 @@ class DobotExtension{
         tmp[1] = args.ACCELERATION;
         tmp[2] = args.VELOCITY;
         tmp[3] = args.ACCELERATION;
-        const ary = new Uint8Array(tmp.buffer);
-        let param = Array.from(ary);
-        const cmd = buildCmd(100, 1, 0, param);
+        let param = Array.from(new Uint8Array(tmp.buffer));
+        const cmd = this.buildCmd(100, 1, 0, param);
         this.write(cmd);
     }
 
@@ -1347,9 +1400,8 @@ class DobotExtension{
         let tmp = new Float32Array(2);
         tmp[0] = args.VELOCITY;
         tmp[1] = args.ACCELERATION;
-        const ary = new Uint8Array(tmp.buffer);
-        let param = Array.from(ary);
-        const cmd = buildCmd(85, 1, 0, param);
+        let param = Array.from(new Uint8Array(tmp.buffer));
+        const cmd = this.buildCmd(85, 1, 0, param);
         this.write(cmd);
     }
 
@@ -1358,60 +1410,95 @@ class DobotExtension{
         let tmp = new Float32Array(2);
         tmp[0] = args.HEIGHT;
         tmp[1] = args.ZLIMIT;
-        const ary = new Uint8Array(tmp.buffer);
-        let param = Array.from(ary);
-        const cmd = buildCmd(82, 1, 0, param);
+        let param = Array.from(new Uint8Array(tmp.buffer));
+        const cmd = this.buildCmd(82, 1, 0, param);
         this.write(cmd);
     }
 
     setLostStep (args) {
         let lost = new Float32Array(1);
         lost[0] = args.LOST;
-        const ary = new Uint8Array(lost.buffer);
-        let param = Array.from(ary);
-        const cmd = buildCmd(170, 1, 0, param);
+        let param = Array.from(new Uint8Array(lost.buffer));
+        const cmd = this.buildCmd(170, 1, 0, param);
         this.write(cmd);
     }
 
-    checkLostStep (args){
-        const cmd = buildCmd(171, 1, 1, null);
+    async checkLostStep (args) {
+        const cmd = this.buildCmd(171, 1, 1, null);
+        await this.writeQueueCmd(cmd);
+    }
+
+    setEndEffectorParams (args) {
+        let endEffectorParams = new Float32Array(3);
+        endEffectorParams[0] = args.XBIAS;
+        endEffectorParams[1] = args.YBIAS;
+        endEffectorParams[2] = args.ZBIAS;
+        let param = Array.from(new Uint8Array(endEffectorParams.buffer));
+        const cmd = this.buildCmd(60, 1, 0, param);
         this.write(cmd);
     }
 
-    parseCmd (msg){
-        if (msg[0] !== 0xaa || msg[1] !== 0xaa) return;
-        if (msg[3] === 10) {		// postion echo
-            let payload = new Uint8Array(msg.slice(5, -1));
-            let floatAry = new Float32Array(payload.buffer);
-            return (floatAry[echoType].toFixed(2)) / 1;
+    /****************************************************************************************************/
+    /****************************************************************************************************/
+    /****************************************************************************************************/
+
+    buildCmd (id, rw, isQueued, param) {
+        id = id & 0xff;
+        let ctrl = 0;
+        if (rw){
+            ctrl += 0x1;
         }
-        else if (msg[3] === 133) {	//extIO
-            let payload = new Uint8Array(msg.slice(5, -1));
-            return payload[1];
+        if (isQueued){
+            ctrl += 0x2;
         }
-        else if (msg[3] === 134) {	//extIO adc
-            let payload = new Uint8Array(msg.slice(5, -1));
-            let uint16Ary = new Uint16Array(payload.buffer.slice(1));
-            return uint16Ary[0];
+        let cmdlen = 2;
+        let header = [0xaa, 0xaa];
+        let buf = [id, ctrl]; // default buffer header
+        if (param && (param instanceof Array)){
+            cmdlen += param.length;
+            buf = buf.concat(param);
         }
-        else if (msg[3] === 137) {	//color
-            let payload = new Uint8Array(msg.slice(5, -1));
-            return payload[0].toString(16) + payload[1].toString(16) + payload[2].toString(16);
+        let sum = buf.reduce((a, b) => a + b, 0);
+        let checkSum = 256 - sum & 0xFF;
+        buf.push(checkSum);
+        buf = header.concat(cmdlen).concat(buf);
+        return buf;
+    };
+
+    async writeQueueCmd(cmd)
+    {
+        let queuedCmdIndex = await this.report(cmd).then(ret => {
+            if (ret[0] == 0xaa && ret[1] == 0xaa) 
+            {
+                let params = new Uint8Array(ret.slice(5, 13));
+                return new Uint32Array(params.buffer);
+            }
+        });
+
+        await this.waitCmd(queuedCmdIndex);
+    }
+
+    async waitCmd(queuedCmdIndex)
+    {
+        const getQueuedCmdCurrentIndexCmd = this.buildCmd(246, 0, 0, null);
+        while (true)
+        {
+            let queuedCmdCurrentIndex = await this.report(getQueuedCmdCurrentIndexCmd).then(ret => {
+                if (ret[0] == 0xaa && ret[1] == 0xaa) 
+                {
+                    let params = new Uint8Array(ret.slice(5, 13));
+                    return new Uint32Array(params.buffer);
+                }
+            });
+
+            if (queuedCmdCurrentIndex[0] >= queuedCmdIndex[0] && queuedCmdCurrentIndex[1] >= queuedCmdIndex[1]) break;
+            await this.delay(100);
         }
-        else if (msg[3] === 138) {	//ir
-            let payload = new Uint8Array(msg.slice(5, -1));
-            return payload[0];
-        }
-        else if (msg[3] === 246) {	//CmdIndex
-            let payload = new Uint8Array(msg.slice(5, -1));
-            let UintAry = new Uint32Array(payload.buffer);
-            return (UintAry[queuedCmdIndex]);
-        }//*/
-        /*else if (msg[3] == 84) {	//ptpcmd report demo
-            let payload = new Uint8Array(msg.slice(5, -1));
-            let uint32Ary = new Uint32Array(payload.buffer);
-            queuedCmdIndex = uint32Ary[1];
-        }//*/
+    }
+
+    delay(ms)
+    {
+        return new Promise(resolve => setTimeout(resolve, ms));
     }
 }
 
